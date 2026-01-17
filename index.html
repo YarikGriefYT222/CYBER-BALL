@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Cyber Ball: Mega Update</title>
+    <style>
+        :root { --accent: #00f2ff; --gem: #d487ff; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; touch-action: none; color: white; -webkit-user-select: none; }
+        .overlay { position: absolute; inset: 0; background: rgba(5,5,10,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; text-align: center; }
+        .btn { background: rgba(255,255,255,0.05); border: 2px solid var(--accent); color: var(--accent); padding: 12px 25px; font-size: 18px; border-radius: 12px; margin: 8px; width: 220px; font-weight: bold; cursor: pointer; pointer-events: all; box-shadow: 0 0 10px rgba(0,242,255,0.2); transition: 0.2s; }
+        .btn:active { transform: scale(0.95); background: var(--accent); color: #000; }
+        .promo-box { display: flex; gap: 5px; margin-bottom: 15px; pointer-events: all; }
+        .promo-input { background: #111; border: 1px solid var(--accent); color: white; padding: 10px; border-radius: 8px; width: 140px; text-align: center; outline: none; }
+        .btn-ok { background: var(--accent); color: #000; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: none; z-index: 10; }
+        .badge { background: rgba(0,0,0,0.7); padding: 8px 12px; border-radius: 10px; font-size: 14px; border: 1px solid var(--accent); pointer-events: all; display: flex; align-items: center; gap: 5px; }
+        .exit-btn { background: #ff4e00; border: none; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; font-weight: bold; }
+        .controls { position: absolute; bottom: 30px; left: 30px; right: 30px; display: flex; justify-content: space-between; pointer-events: none; }
+        #joy-base { width: 90px; height: 90px; background: rgba(255,255,255,0.1); border-radius: 50%; position: relative; pointer-events: all; border: 2px solid var(--accent); }
+        #joy-stick { width: 42px; height: 42px; background: var(--accent); border-radius: 50%; position: absolute; top: 24px; left: 24px; box-shadow: 0 0 15px var(--accent); }
+        #jump-btn { width: 80px; height: 80px; background: var(--accent); border-radius: 20px; display: flex; align-items: center; justify-content: center; color: #000; font-weight: 900; pointer-events: all; }
+        .skin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; pointer-events: all; max-height: 50vh; overflow-y: auto; padding: 15px; background: rgba(0,0,0,0.8); border-radius: 15px; border: 1px solid #333; }
+        .skin-card { background: #111; padding: 8px; border-radius: 12px; border: 1px solid #333; width: 85px; text-align: center; transition: 0.2s; cursor: pointer; }
+        .skin-card.active { border-color: var(--accent); box-shadow: 0 0 10px var(--accent); transform: scale(1.05); }
+        #flash { position: fixed; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 200; }
+    </style>
+</head>
+<body>
+
+    <div id="flash"></div>
+
+    <div id="m-main" class="overlay">
+        <h1 style="color: var(--accent); text-shadow: 0 0 20px var(--accent); letter-spacing: 3px; margin-bottom: 5px;">CYBER BALL</h1>
+        <p style="font-size: 12px; color: #666; margin-bottom: 20px;">v2.0 FIXED EXIT & SKINS</p>
+        <p id="save-info">ЗАГРУЗКА...</p>
+        <button class="btn" onclick="game.start()">ИГРАТЬ</button>
+        <button class="btn" onclick="ui.showSkins()">МАГАЗИН</button>
+    </div>
+
+    <div id="m-skins" class="overlay" style="display:none">
+        <div class="promo-box">
+            <input type="text" id="promo-input" class="promo-input" placeholder="ПРОМОКОД">
+            <button class="btn-ok" onclick="game.usePromo()">OK</button>
+        </div>
+        <div class="skin-grid" id="skin-list"></div>
+        <button class="btn" style="width:140px; margin-top: 15px;" onclick="ui.hideSkins()">НАЗАД</button>
+    </div>
+
+    <div class="hud" id="hud-container" style="display: none;">
+        <div class="badge">
+            <button class="exit-btn" onclick="game.exitToMenu()">В МЕНЮ</button>
+            <span id="hud-lvl">LVL 1</span>
+        </div>
+        <div class="badge" id="hud-gems">0 💎</div>
+    </div>
+
+    <div class="controls" id="controls-container" style="display: none;">
+        <div id="joy-base"><div id="joy-stick"></div></div>
+        <div id="jump-btn">UP</div>
+    </div>
+
+    <canvas id="screen"></canvas>
+
+<script>
+const canvas = document.getElementById('screen');
+const ctx = canvas.getContext('2d');
+let w, h, moveInput = 0;
+
+const SAVE_KEY = 'CB_ULTRA_V200_FIX';
+
+const skins = [
+    { name: 'Eye-Bot', type: 'eye', cost: 0, color: '#00f2ff' },
+    { name: 'Steve', type: 'steve', cost: 100, color: '#2ecc71' },
+    { name: 'Noob', type: 'noob', cost: 500, color: '#ffd700' },
+    { name: 'Marsh', type: 'marsh', cost: 300, color: '#fff' },
+    { name: 'Robo', type: 'robo', cost: 800, color: '#555' },
+    { name: 'Brick', type: 'lego', cost: 1000, color: '#fdd835' },
+    { name: 'Peely', type: 'peely', cost: 1500, color: '#f1c40f' },
+    { name: 'Skull', type: 'skull', cost: 1800, color: '#eee' },
+    { name: 'Ronin', type: 'ronin', cost: 2200, color: '#e74c3c' },
+    { name: 'Trooper', type: 'trooper', cost: 2800, color: '#fff' },
+    { name: 'Vader', type: 'vader', cost: 3500, color: '#111' },
+    { name: 'Fire', type: 'fire', cost: 1200, color: '#ff4e00' },
+    { name: 'Void', type: 'void', cost: 4000, color: '#2b0054' },
+    { name: 'Gold', type: 'gold', cost: 8000, color: '#ffcc00' }
+];
+
+const biomes = {
+    city: { n: 'CITY', bg: '#050508', pl: '#111', gr: '#00f2ff', g: 0.8, j: -15, type: 'std' },
+    forest: { n: 'FOREST', bg: '#0a2f0c', pl: '#3e2723', gr: '#4caf50', g: 0.8, j: -15, type: 'std' },
+    moon: { n: 'MOON', bg: '#050515', pl: '#2c2c3a', gr: '#eee', g: 0.35, j: -10, type: 'stars' },
+    sakura: { n: 'SAKURA', bg: '#2d0a1a', pl: '#4a1a2c', gr: '#ff80ab', g: 0.8, j: -15, type: 'std' },
+    craft: { n: 'CRAFT', bg: '#87ceeb', pl: '#795548', gr: '#4caf50', g: 0.9, j: -16, type: 'std' },
+    factory: { n: 'FACTORY', bg: '#121212', pl: '#333', gr: '#ff9800', g: 0.8, j: -15, type: 'fact' },
+    lego: { n: 'LEGO', bg: '#ffeb3b', pl: '#f44336', gr: '#2196f3', g: 0.8, j: -15, type: 'lego' },
+    fort: { n: 'FORTNITE', bg: '#2e0b4e', pl: '#1a1a1a', gr: '#a033ff', g: 0.8, j: -15, type: 'std' },
+    wars: { n: 'STAR WARS', bg: '#000', pl: '#111', gr: '#ff0000', g: 0.5, j: -12, type: 'stars' }
+};
+
+const game = {
+    data: JSON.parse(localStorage.getItem(SAVE_KEY)) || { lvl: 1, gems: 0, activeSkin: 0, owned: [0], used: [] },
+    running: false, currentBiome: biomes.city,
+
+    start() { 
+        document.getElementById('m-main').style.display='none'; 
+        document.getElementById('hud-container').style.display='flex';
+        document.getElementById('controls-container').style.display='flex';
+        this.running=true; 
+        this.initLevel(this.data.lvl); 
+    },
+
+    exitToMenu() {
+        this.running = false;
+        document.getElementById('m-main').style.display='flex'; 
+        document.getElementById('hud-container').style.display='none';
+        document.getElementById('controls-container').style.display='none';
+        ui.updateHUD();
+    },
+    
+    initLevel(lvl) {
+        if(lvl >= 81) this.currentBiome = biomes.wars;
+        else if(lvl >= 66) this.currentBiome = biomes.fort;
+        else if(lvl >= 51) this.currentBiome = biomes.lego;
+        else if(lvl >= 41) this.currentBiome = biomes.factory;
+        else if(lvl >= 31) this.currentBiome = biomes.craft;
+        else if(lvl >= 16) this.currentBiome = biomes.sakura;
+        else if(lvl >= 11) this.currentBiome = biomes.moon;
+        else if(lvl >= 5) this.currentBiome = biomes.forest;
+        else this.currentBiome = biomes.city;
+        world.init();
+        ui.updateHUD();
+    },
+
+    usePromo() {
+        const p = document.getElementById('promo-input').value.trim().toUpperCase();
+        if(this.data.used.includes(p)) return alert("УЖЕ БЫЛО!");
+        
+        const flash = () => {
+            const f = document.getElementById('flash');
+            f.style.opacity = '1'; 
+            setTimeout(() => { f.style.transition='opacity 1s'; f.style.opacity='0'; }, 50);
+            f.style.transition='none';
+        };
+
+        const tps = { 'GOCITY':1, 'GOFOREST':5, 'GOLUNA':11, 'GOSAKURA':16, 'GOCRAFT':31, 'GOFACTORY':41, 'GOLEGO':51, 'GOFORT':66, 'GOWARS':81 };
+        
+        if(tps[p]) { 
+            this.data.lvl = tps[p]; 
+            flash(); 
+            if(this.running) this.initLevel(tps[p]); 
+        }
+        else if(p === 'MONEY777') { 
+            this.data.gems += 10000; 
+            alert("+10,000 💎"); 
+        }
+        else {
+            const small = ['COIN200','GEM500','GIFT300','FREE400','START250','LUCKY500','BOOST200','CRAFT300','LEGO400','WARS500'];
+            if(small.includes(p)) {
+                let v = parseInt(p.replace(/\D/g,'')) || 300;
+                this.data.gems += v; 
+                this.data.used.push(p); 
+                alert(`+${v} 💎`);
+            } else return alert("НЕТ ТАКОГО КОДА");
+        }
+        this.save(); ui.renderSkins(); ui.updateHUD();
+    },
+
+    save() { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); },
+    buySkin(i) {
+        if(this.data.owned.includes(i)) this.data.activeSkin = i;
+        else if(this.data.gems >= skins[i].cost) { 
+            this.data.gems -= skins[i].cost; 
+            this.data.owned.push(i); 
+            this.data.activeSkin = i; 
+        }
+        this.save(); ui.renderSkins(); ui.updateHUD();
+    }
+};
+
+const world = {
+    p: { x: 100, y: 0, vx: 0, vy: 0, r: 18, grounded: false, rot: 0 },
+    plats: [], gems: [], camX: 0,
+    init() {
+        this.plats = [{x: 0, y: h*0.7, w: 500, h: 40}]; this.gems = [];
+        for(let i=1; i<40; i++) {
+            let px = i * 420, py = h*0.35 + Math.random()*h*0.35;
+            this.plats.push({x: px, y: py, w: 220, h: 35});
+            if(Math.random()>0.3) this.gems.push({x: px + 100, y: py - 45, col: false});
+        }
+        this.p.x=100; this.p.y=h*0.5; this.p.vx=0; this.p.vy=0; this.camX=0;
+    }
+};
+
+function drawSkin(c, x, y, r, i) {
+    const s = skins[i]; c.save(); c.translate(x, y); 
+    if(game.running) world.p.rot += moveInput * 0.1;
+    c.rotate(world.p.rot);
+    
+    c.fillStyle = s.color;
+    if(s.type === 'vader') {
+        c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        c.fillStyle="#222"; c.beginPath(); c.moveTo(-r,0); c.lineTo(0,-r-12); c.lineTo(r,0); c.fill();
+        c.fillStyle="red"; c.fillRect(-7,-4,4,2); c.fillRect(3,-4,4,2);
+        c.fillStyle="#000"; c.fillRect(-4,4,8,8);
+    } else if(s.type === 'peely') {
+        c.scale(0.7, 1.4); c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        c.fillStyle="#000"; c.beginPath(); c.arc(-4,-3,2,0,7); c.arc(4,-3,2,0,7); c.fill();
+        c.fillStyle="#331a00"; c.fillRect(-2,-r,4,4);
+    } else if(s.type === 'marsh') {
+        c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        c.fillStyle="#000"; c.font = "bold 12px Arial";
+        c.fillText("x", -8, -2); c.fillText("x", 2, -2);
+        c.beginPath(); c.arc(0, 5, 5, 0.2, Math.PI-0.2); c.stroke();
+    } else if(s.type === 'robo') {
+        c.fillRect(-r, -r, r*2, r*2);
+        c.fillStyle = "#00f2ff"; c.fillRect(-12, -8, 24, 6);
+        c.fillStyle = "#fff"; c.fillRect(-8, -6, 4, 2); c.fillRect(4, -6, 4, 2);
+    } else if(s.type === 'skull') {
+        c.beginPath(); c.arc(0,-3,r,0,7); c.fill();
+        c.fillRect(-10, 5, 20, 10);
+        c.fillStyle="#000"; c.beginPath(); c.arc(-6, -3, 4, 0, 7); c.arc(6, -3, 4, 0, 7); c.fill();
+        for(let j=-6; j<=6; j+=4) c.fillRect(j, 8, 2, 4);
+    } else if(s.type === 'ronin') {
+        c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        c.fillStyle="#fff"; c.beginPath(); c.moveTo(-12,-5); c.lineTo(-2,0); c.lineTo(-12,5); c.fill();
+        c.beginPath(); c.moveTo(12,-5); c.lineTo(2,0); c.lineTo(12,5); c.fill();
+        c.fillStyle="yellow"; c.beginPath(); c.arc(-5,-2,2,0,7); c.arc(5,-2,2,0,7); c.fill();
+    } else if(s.type === 'trooper') {
+        c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        c.fillStyle="#000";
+        c.beginPath(); c.moveTo(-14,-4); c.lineTo(-4,-4); c.lineTo(-2, 2); c.lineTo(-12, 2); c.fill();
+        c.beginPath(); c.moveTo(14,-4); c.lineTo(4,-4); c.lineTo(2, 2); c.lineTo(12, 2); c.fill();
+        c.fillRect(-4, 6, 8, 3);
+    } else if(s.type === 'fire') {
+        for(let j=0; j<5; j++) {
+            c.fillStyle = j%2==0 ? "#ff4e00" : "#ffcc00";
+            c.beginPath(); c.arc(Math.sin(Date.now()*0.01+j)*5, -r-j*3, 8-j, 0, 7); c.fill();
+        }
+        c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        c.fillStyle="white"; c.fillRect(-7,-4,4,4); c.fillRect(3,-4,4,4);
+    } else if(s.type === 'void') {
+        let g = c.createRadialGradient(0,0,0,0,0,r);
+        g.addColorStop(0, "#8a2be2"); g.addColorStop(1, "#000");
+        c.fillStyle = g; c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        c.strokeStyle = "#ff00ff"; c.lineWidth = 2; c.stroke();
+        c.fillStyle="#fff"; c.beginPath(); c.arc(0,0,4,0,7); c.fill();
+    } else if(s.type === 'gold') {
+        c.shadowBlur = 15; c.shadowColor = "gold";
+        c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        c.strokeStyle="#fff"; c.beginPath(); c.moveTo(-10,-10); c.lineTo(-5,-5); c.moveTo(5,-10); c.lineTo(10,-5); c.stroke();
+    } else if(s.type === 'steve' || s.type === 'noob') {
+        c.fillRect(-r,-r,r*2,r*2);
+        c.fillStyle = (s.type==='steve')?"#3d2b1f":"#fff"; c.fillRect(-r,-r,r*2,r/2);
+        c.fillStyle="white"; c.fillRect(-7,0,5,4); c.fillRect(3,0,5,4);
+    } else {
+        c.beginPath(); c.arc(0,0,r,0,7); c.fill();
+        if(s.type==='eye'){
+            c.fillStyle="#fff"; c.beginPath(); c.arc(5,-5,10,0,7); c.fill(); 
+            c.fillStyle="#000"; c.beginPath(); c.arc(7,-5,5,0,7); c.fill();
+        }
+    }
+    c.restore();
+}
+
+const ui = {
+    showSkins: () => { ui.renderSkins(); document.getElementById('m-skins').style.display='flex'; },
+    hideSkins: () => document.getElementById('m-skins').style.display='none',
+    renderSkins: () => {
+        const list = document.getElementById('skin-list');
+        list.innerHTML = skins.map((s, i) => `
+            <div class="skin-card ${game.data.activeSkin === i ? 'active' : ''}" onclick="game.buySkin(${i})">
+                <canvas id="pre-${i}" width="40" height="40"></canvas>
+                <div style="font-size:9px; font-weight:bold">${s.name}</div>
+                <div style="font-size:9px; color:var(--gem)">${game.data.owned.includes(i) ? 'ВЫБРАТЬ' : s.cost+'💎'}</div>
+            </div>`).join('');
+        skins.forEach((_,i) => drawSkin(document.getElementById(`pre-${i}`).getContext('2d'), 20, 20, 14, i));
+    },
+    updateHUD: () => {
+        document.getElementById('hud-lvl').innerText = `LVL ${game.data.lvl} | ${game.currentBiome.n}`;
+        document.getElementById('hud-gems').innerText = `${game.data.gems} 💎`;
+        document.getElementById('save-info').innerText = `БАЛАНС: ${game.data.gems} 💎`;
+    }
+};
+
+const base = document.getElementById('joy-base'), stick = document.getElementById('joy-stick');
+
+base.addEventListener('touchmove', e => {
+    let dx = e.touches[0].clientX - (base.offsetLeft + 45);
+    let d = Math.max(-28, Math.min(28, dx));
+    stick.style.left = (24 + d) + 'px'; moveInput = d / 28;
+});
+base.addEventListener('touchend', () => { stick.style.left = '24px'; moveInput = 0; });
+document.getElementById('jump-btn').addEventListener('touchstart', e => { 
+    e.preventDefault(); if(world.p.grounded) world.p.vy = game.currentBiome.j; 
+});
+
+function update() {
+    if(!game.running) return;
+    const p = world.p, b = game.currentBiome;
+    p.vx += moveInput * 1.3; p.vx *= 0.88; p.vy += b.g;
+    p.x += p.vx; p.y += p.vy; p.grounded = false;
+    world.plats.forEach(pl => {
+        if(p.x+p.r > pl.x && p.x-p.r < pl.x+pl.w && p.y+p.r > pl.y && p.y-p.r < pl.y+pl.h) {
+            if(p.vy > 0 && p.y < pl.y+10) { p.y = pl.y-p.r; p.vy = 0; p.grounded = true; }
+        }
+    });
+    world.gems.forEach(g => { if(!g.col && Math.hypot(p.x-g.x, p.y-g.y) < 32) { g.col = true; game.data.gems += 5; ui.updateHUD(); } });
+    world.camX += (p.x - world.camX - w/3) * 0.1;
+    if(p.y > h + 150) world.init();
+    if(p.x > world.plats.length * 400) { game.data.lvl++; game.save(); game.initLevel(game.data.lvl); }
+}
+
+function draw() {
+    const b = game.currentBiome;
+    ctx.fillStyle = b.bg; ctx.fillRect(0,0,w,h);
+    if(b.type === 'stars') { ctx.fillStyle="#fff"; for(let i=0; i<40; i++) ctx.fillRect((i*167)%w, (i*243)%h, 2, 2); }
+    ctx.save(); ctx.translate(-world.camX, 0);
+    world.plats.forEach(pl => {
+        ctx.fillStyle = b.pl; ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+        ctx.fillStyle = b.gr; ctx.fillRect(pl.x, pl.y, pl.w, 6);
+        if(b.type === 'lego') { for(let k=12; k<pl.w; k+=30) { ctx.beginPath(); ctx.arc(pl.x+k, pl.y, 7, 0, 7); ctx.fill(); } }
+    });
+    ctx.fillStyle = '#d487ff'; world.gems.forEach(g => { if(!g.col) { ctx.beginPath(); ctx.arc(g.x, g.y, 8, 0, 7); ctx.fill(); } });
+    drawSkin(ctx, world.p.x, world.p.y, world.p.r, game.data.activeSkin);
+    ctx.restore();
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+window.addEventListener('resize', () => { w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight; });
+w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight;
+ui.updateHUD(); loop();
+</script>
+</body>
+</html>
